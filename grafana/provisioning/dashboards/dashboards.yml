@@ -1,0 +1,11 @@
+apiVersion: 1
+
+providers:
+  - name: Ticketmei
+    orgId: 1
+    folder: Ticketmei
+    type: file
+    disableDeletion: false
+    editable: true
+    options:
+      path: /var/lib/grafana/dashboards
