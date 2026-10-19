@@ -40,7 +40,7 @@ services:
       - "3000:3000"
     volumes:
       - ./grafana/provisioning:/etc/grafana/provisioning:ro
-      - ./dasboard1.json:/var/lib/grafana/dashboards/gateway.json:ro
+      - ./dashboard1.json:/var/lib/grafana/dashboards/gateway.json:ro
     depends_on:
       - prometheus
     networks:

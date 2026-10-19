@@ -75,6 +75,28 @@ async def get_events(request: Request):
     )
 
 
+@app.get("/events/{event_id}")
+async def get_event(event_id: str, request: Request):
+    try:
+        upstream_response = await request.app.state.catalog_client.get(
+            f"{CATALOG_URL}/events/{event_id}", params=request.query_params
+        )
+    except httpx.TimeoutException as exc:
+        raise HTTPException(status_code=504, detail="Catalog request timed out") from exc
+    except httpx.HTTPError as exc:
+        raise HTTPException(status_code=502, detail="Catalog is unavailable") from exc
+
+    return Response(
+        content=upstream_response.content,
+        status_code=upstream_response.status_code,
+        headers={
+            "content-type": upstream_response.headers.get(
+                "content-type", "application/json"
+            )
+        },
+    )
+
+
 @app.get("/metrics")
 async def metrics():
     return Response(generate_latest(), media_type=CONTENT_TYPE_LATEST)
