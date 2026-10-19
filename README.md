@@ -1,4 +1,4 @@
-# TicketMEI — Plataforma de Venda de Bilhetes para Eventos (Parte I)
+# TicketMEI - Plataforma de Venda de Bilhetes para Eventos (Parte I)
 
 Projeto desenvolvido no âmbito da unidade curricular de **Sistemas Distribuídos (2026/2027)** — Mestrado em Engenharia Informática, Universidade da Madeira.
 
