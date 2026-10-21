@@ -85,7 +85,7 @@ docker compose down
 
 ---
 
-### Método 2: Execução Local em Python (Sem Docker — para Desenvolvimento)
+### Método 2: Execução Local em Python (Sem Docker - para Desenvolvimento)
 
 Se pretender depurar os serviços individualmente em modo local:
 
