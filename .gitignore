@@ -1,0 +1,10 @@
+__pycache__/
+*.py[cod]
+*$py.class
+.venv/
+env/
+venv/
+data/*.db
+data/*.db-journal
+.DS_Store
+FASE2_IMPLEMENTACAO.md

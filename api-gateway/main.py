@@ -8,6 +8,7 @@ from prometheus_client import CONTENT_TYPE_LATEST, Counter, Histogram, generate_
 
 
 CATALOG_URL = os.getenv("CATALOG_URL", "http://catalog:8001").rstrip("/")
+ORDER_URL = os.getenv("ORDER_URL", "http://order:8002").rstrip("/")
 
 gateway_requests_total = Counter(
     "gateway_requests_total",
@@ -24,8 +25,10 @@ gateway_request_duration_seconds = Histogram(
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     app.state.catalog_client = httpx.AsyncClient(timeout=10.0)
+    app.state.order_client = httpx.AsyncClient(timeout=10.0)
     yield
     await app.state.catalog_client.aclose()
+    await app.state.order_client.aclose()
 
 
 app = FastAPI(lifespan=lifespan)
@@ -85,6 +88,77 @@ async def get_event(event_id: str, request: Request):
         raise HTTPException(status_code=504, detail="Catalog request timed out") from exc
     except httpx.HTTPError as exc:
         raise HTTPException(status_code=502, detail="Catalog is unavailable") from exc
+
+    return Response(
+        content=upstream_response.content,
+        status_code=upstream_response.status_code,
+        headers={
+            "content-type": upstream_response.headers.get(
+                "content-type", "application/json"
+            )
+        },
+    )
+
+
+@app.post("/orders")
+async def create_order(request: Request):
+    body = await request.body()
+    try:
+        upstream_response = await request.app.state.order_client.post(
+            f"{ORDER_URL}/orders",
+            content=body,
+            headers={
+                "content-type": request.headers.get("content-type", "application/json")
+            },
+        )
+    except httpx.TimeoutException as exc:
+        raise HTTPException(status_code=504, detail="Order service timed out") from exc
+    except httpx.HTTPError as exc:
+        raise HTTPException(status_code=502, detail="Order service is unavailable") from exc
+
+    return Response(
+        content=upstream_response.content,
+        status_code=upstream_response.status_code,
+        headers={
+            "content-type": upstream_response.headers.get(
+                "content-type", "application/json"
+            )
+        },
+    )
+
+
+@app.get("/orders/{order_id}")
+async def get_order(order_id: int, request: Request):
+    try:
+        upstream_response = await request.app.state.order_client.get(
+            f"{ORDER_URL}/orders/{order_id}"
+        )
+    except httpx.TimeoutException as exc:
+        raise HTTPException(status_code=504, detail="Order service timed out") from exc
+    except httpx.HTTPError as exc:
+        raise HTTPException(status_code=502, detail="Order service is unavailable") from exc
+
+    return Response(
+        content=upstream_response.content,
+        status_code=upstream_response.status_code,
+        headers={
+            "content-type": upstream_response.headers.get(
+                "content-type", "application/json"
+            )
+        },
+    )
+
+
+@app.get("/orders")
+async def list_orders(request: Request):
+    try:
+        upstream_response = await request.app.state.order_client.get(
+            f"{ORDER_URL}/orders", params=request.query_params
+        )
+    except httpx.TimeoutException as exc:
+        raise HTTPException(status_code=504, detail="Order service timed out") from exc
+    except httpx.HTTPError as exc:
+        raise HTTPException(status_code=502, detail="Order service is unavailable") from exc
 
     return Response(
         content=upstream_response.content,
