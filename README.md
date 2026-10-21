@@ -1,8 +1,6 @@
 # TicketMEI - Plataforma de Venda de Bilhetes para Eventos
 
-Projeto desenvolvido no âmbito da unidade curricular de **Sistemas Distribuídos (2026/2027)** — Mestrado em Engenharia Informática, Universidade da Madeira.
-
-> 📄 **Documento de Controlo de Requisitos**: Consulte [FASE2_IMPLEMENTACAO.md](file:///c:/Users/nelso/Desktop/SD/Parte-I---ficheiros/FASE2_IMPLEMENTACAO.md) para a lista detalhada do que se encontra implementado e do que está planeado para as próximas fases.
+Projeto desenvolvido no âmbito da unidade curricular de **Sistemas Distribuídos (2026/2027)** - Mestrado em Engenharia Informática, Universidade da Madeira.
 
 ---
 
