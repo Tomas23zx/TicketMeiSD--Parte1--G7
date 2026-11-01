@@ -15,7 +15,7 @@ spec:
     spec:
       containers:
         - name: notification
-          image: ghcr.io/luisgsousaa/ticketmei-notification:latest
+          image: ghcr.io/luisgsousaa/ticketmei-notification:f152874b2ed8cac4b30d2735bd38884d60b40f3b
           imagePullPolicy: Always
           ports:
             - name: http
