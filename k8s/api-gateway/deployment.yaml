@@ -15,7 +15,7 @@ spec:
     spec:
       containers:
         - name: api-gateway
-          image: ghcr.io/luisgsousaa/ticketmei-api-gateway:e4e2f2c64b073ab76194bc2cee22c34af874377b
+          image: ghcr.io/luisgsousaa/ticketmei-api-gateway:c9cd5edc84ec1da27f32a9981f22c89df9a8f394
           imagePullPolicy: Always
           ports:
             - name: http
