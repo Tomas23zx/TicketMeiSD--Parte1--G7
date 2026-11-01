@@ -1,0 +1,53 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: notification
+  namespace: ticketmei
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: notification
+  template:
+    metadata:
+      labels:
+        app: notification
+    spec:
+      containers:
+        - name: notification
+          image: ghcr.io/luisgsousaa/ticketmei-notification:latest
+          imagePullPolicy: Always
+          ports:
+            - name: http
+              containerPort: 8003
+          env:
+            - name: RABBITMQ_URL
+              value: amqp://guest:guest@rabbitmq:5672/
+            - name: DATABASE_PATH
+              value: /app/data/notification.db
+            - name: LOGS_FILE
+              value: /app/data/notification_logs.json
+          volumeMounts:
+            - name: notification-data
+              mountPath: /app/data
+          readinessProbe:
+            httpGet:
+              path: /metrics
+              port: http
+            initialDelaySeconds: 15
+          livenessProbe:
+            httpGet:
+              path: /metrics
+              port: http
+            initialDelaySeconds: 30
+          resources:
+            requests:
+              cpu: 50m
+              memory: 128Mi
+            limits:
+              cpu: 500m
+              memory: 512Mi
+      volumes:
+        - name: notification-data
+          persistentVolumeClaim:
+            claimName: notification-data

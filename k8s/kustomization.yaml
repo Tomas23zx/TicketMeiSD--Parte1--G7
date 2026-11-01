@@ -1,0 +1,24 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+resources:
+  - namespace.yaml
+  - redis/deployment.yaml
+  - redis/service.yaml
+  - rabbitmq/deployment.yaml
+  - rabbitmq/service.yaml
+  - catalog/deployment.yaml
+  - catalog/service.yaml
+  - catalog/configmap.yaml
+  - order/deployment.yaml
+  - order/service.yaml
+  - order/pvc.yaml
+  - notification/deployment.yaml
+  - notification/service.yaml
+  - notification/pvc.yaml
+  - api-gateway/deployment.yaml
+  - api-gateway/service.yaml
+  - monitoring/prometheus-configmap.yaml
+  - monitoring/prometheus-deployment.yaml
+  - monitoring/grafana-deployment.yaml
+  - monitoring/services.yaml

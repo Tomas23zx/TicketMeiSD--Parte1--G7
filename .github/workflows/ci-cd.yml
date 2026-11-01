@@ -1,0 +1,122 @@
+name: CI/CD
+
+on:
+  push:
+    branches:
+      - main
+  pull_request:
+
+permissions:
+  contents: write
+
+env:
+  REGISTRY: ghcr.io
+  IMAGE_OWNER: luisgsousaa
+
+jobs:
+  validate:
+    name: Validate source and manifests
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install service dependencies
+        shell: bash
+        run: |
+          python -m pip install --upgrade pip
+          for requirements in api-gateway catalog order notification; do
+            python -m pip install -r "${requirements}/requirements.txt"
+          done
+
+      - name: Validate Python syntax
+        shell: bash
+        run: |
+          python -m py_compile \
+            api-gateway/main.py \
+            catalog/main.py \
+            order/main.py \
+            notification/main.py
+
+      - name: Validate Docker Compose
+        run: docker compose config --quiet
+
+      - name: Validate Kubernetes manifests
+        run: kubectl kustomize k8s > /dev/null
+
+  publish:
+    name: Build and publish images
+    needs: validate
+    if: github.event_name == 'push' && github.actor != 'github-actions[bot]'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      packages: write
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Log in to GHCR
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ secrets.GHCR_USERNAME }}
+          password: ${{ secrets.GHCR_TOKEN }}
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Build and push API Gateway
+        uses: docker/build-push-action@v6
+        with:
+          context: ./api-gateway
+          push: true
+          tags: ${{ env.REGISTRY }}/${{ env.IMAGE_OWNER }}/ticketmei-api-gateway:${{ github.sha }}
+
+      - name: Build and push Catalog
+        uses: docker/build-push-action@v6
+        with:
+          context: ./catalog
+          push: true
+          tags: ${{ env.REGISTRY }}/${{ env.IMAGE_OWNER }}/ticketmei-catalog:${{ github.sha }}
+
+      - name: Build and push Order
+        uses: docker/build-push-action@v6
+        with:
+          context: ./order
+          push: true
+          tags: ${{ env.REGISTRY }}/${{ env.IMAGE_OWNER }}/ticketmei-order:${{ github.sha }}
+
+      - name: Build and push Notification
+        uses: docker/build-push-action@v6
+        with:
+          context: ./notification
+          push: true
+          tags: ${{ env.REGISTRY }}/${{ env.IMAGE_OWNER }}/ticketmei-notification:${{ github.sha }}
+
+      - name: Update Kubernetes image tags
+        shell: bash
+        run: |
+          for service in api-gateway catalog order notification; do
+            sed -i -E \
+              "s#(image: ghcr.io/luisgsousaa/ticketmei-${service}:).*#\1${GITHUB_SHA}#" \
+              "k8s/${service}/deployment.yaml"
+          done
+
+      - name: Commit updated Kubernetes manifests
+        shell: bash
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add k8s
+          if git diff --cached --quiet; then
+            echo "No Kubernetes manifest changes to commit."
+            exit 0
+          fi
+          git commit -m "chore: deploy images ${GITHUB_SHA::12}"
+          git push

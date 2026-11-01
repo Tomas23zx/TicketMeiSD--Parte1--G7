@@ -2,3 +2,4 @@ fastapi
 httpx
 prometheus-client
 uvicorn
+redis

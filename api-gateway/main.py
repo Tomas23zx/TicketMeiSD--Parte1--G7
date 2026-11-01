@@ -1,14 +1,30 @@
 import os
 from contextlib import asynccontextmanager
+from math import ceil
 from time import perf_counter
 
 import httpx
 from fastapi import FastAPI, HTTPException, Request, Response
+from fastapi.responses import JSONResponse
 from prometheus_client import CONTENT_TYPE_LATEST, Counter, Histogram, generate_latest
+from redis import RedisError
+from redis.asyncio import Redis
 
 
 CATALOG_URL = os.getenv("CATALOG_URL", "http://catalog:8001").rstrip("/")
 ORDER_URL = os.getenv("ORDER_URL", "http://order:8002").rstrip("/")
+REDIS_URL = os.getenv("REDIS_URL", "redis://redis:6379/0")
+RATE_LIMIT_REQUESTS = int(os.getenv("RATE_LIMIT_REQUESTS", "100"))
+RATE_LIMIT_WINDOW_SECONDS = int(os.getenv("RATE_LIMIT_WINDOW_SECONDS", "60"))
+
+RATE_LIMIT_SCRIPT = """
+local count = redis.call('INCR', KEYS[1])
+if count == 1 then
+    redis.call('EXPIRE', KEYS[1], ARGV[1])
+end
+local ttl = redis.call('PTTL', KEYS[1])
+return {count, ttl}
+"""
 
 gateway_requests_total = Counter(
     "gateway_requests_total",
@@ -26,12 +42,57 @@ gateway_request_duration_seconds = Histogram(
 async def lifespan(app: FastAPI):
     app.state.catalog_client = httpx.AsyncClient(timeout=10.0)
     app.state.order_client = httpx.AsyncClient(timeout=10.0)
-    yield
-    await app.state.catalog_client.aclose()
-    await app.state.order_client.aclose()
+    app.state.redis = Redis.from_url(REDIS_URL, decode_responses=True)
+    try:
+        await app.state.redis.ping()
+        yield
+    finally:
+        await app.state.catalog_client.aclose()
+        await app.state.order_client.aclose()
+        await app.state.redis.aclose()
 
 
 app = FastAPI(lifespan=lifespan)
+
+
+@app.middleware("http")
+async def rate_limit_requests(request: Request, call_next):
+    if request.url.path == "/metrics":
+        return await call_next(request)
+
+    client_host = request.client.host if request.client else "unknown"
+    key = f"ticketmei:rate-limit:{client_host}"
+    try:
+        count, ttl_milliseconds = await request.app.state.redis.eval(
+            RATE_LIMIT_SCRIPT,
+            1,
+            key,
+            RATE_LIMIT_WINDOW_SECONDS,
+        )
+    except RedisError as exc:
+        raise HTTPException(
+            status_code=503,
+            detail="Rate limiting service is unavailable",
+        ) from exc
+
+    remaining = max(RATE_LIMIT_REQUESTS - int(count), 0)
+    headers = {
+        "X-RateLimit-Limit": str(RATE_LIMIT_REQUESTS),
+        "X-RateLimit-Remaining": str(remaining),
+    }
+    if int(count) > RATE_LIMIT_REQUESTS:
+        retry_after = max(ceil(int(ttl_milliseconds) / 1000), 1)
+        headers["Retry-After"] = str(retry_after)
+        return JSONResponse(
+            status_code=429,
+            content={"detail": "Too many requests"},
+            headers=headers,
+        )
+
+    response = await call_next(request)
+    for header_name, header_value in headers.items():
+        response.headers[header_name] = header_value
+    return response
 
 
 @app.middleware("http")

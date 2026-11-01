@@ -21,6 +21,19 @@ services:
     networks:
       - ticketmei-net
 
+  redis:
+    image: redis:7-alpine
+    container_name: redis
+    ports:
+      - "6379:6379"
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+    networks:
+      - ticketmei-net
+
   catalog:
     build: ./catalog
     container_name: catalog
@@ -72,9 +85,16 @@ services:
     environment:
       CATALOG_URL: http://catalog:8001
       ORDER_URL: http://order:8002
+      REDIS_URL: redis://redis:6379/0
+      RATE_LIMIT_REQUESTS: 100
+      RATE_LIMIT_WINDOW_SECONDS: 60
     depends_on:
-      - catalog
-      - order
+      catalog:
+        condition: service_started
+      order:
+        condition: service_started
+      redis:
+        condition: service_healthy
     networks:
       - ticketmei-net
 
