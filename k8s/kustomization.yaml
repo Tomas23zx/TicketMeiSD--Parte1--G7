@@ -22,3 +22,15 @@ resources:
   - monitoring/prometheus-deployment.yaml
   - monitoring/grafana-deployment.yaml
   - monitoring/services.yaml
+
+configMapGenerator:
+  - name: grafana-datasource
+    files:
+      - monitoring/assets/grafana/provisioning/datasources/prometheus.yml
+  - name: grafana-dashboard-provider
+    files:
+      - monitoring/assets/grafana/provisioning/dashboards/dashboards.yml
+  - name: grafana-dashboards
+    files:
+      - monitoring/assets/dashboard1.json
+      - monitoring/assets/dashboard2.json
