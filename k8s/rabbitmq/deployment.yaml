@@ -34,7 +34,8 @@ spec:
                 - rabbitmq-diagnostics
                 - -q
                 - ping
-            initialDelaySeconds: 15
+            initialDelaySeconds: 30
+            timeoutSeconds: 10
             periodSeconds: 10
           livenessProbe:
             exec:
@@ -42,7 +43,8 @@ spec:
                 - rabbitmq-diagnostics
                 - -q
                 - ping
-            initialDelaySeconds: 30
+            initialDelaySeconds: 60
+            timeoutSeconds: 10
             periodSeconds: 15
           resources:
             requests:
