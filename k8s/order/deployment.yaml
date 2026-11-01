@@ -15,7 +15,7 @@ spec:
     spec:
       containers:
         - name: order
-          image: ghcr.io/luisgsousaa/ticketmei-order:8f771b147a30e5d051245fa61a2d24a538ecad8c
+          image: ghcr.io/luisgsousaa/ticketmei-order:26d31fd72e8bfaaa4a4406dda75ad0dea8d9d89d
           imagePullPolicy: Always
           ports:
             - name: http
