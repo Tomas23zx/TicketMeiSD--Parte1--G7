@@ -25,12 +25,18 @@ resources:
 
 configMapGenerator:
   - name: grafana-datasource
+    options:
+      disableNameSuffixHash: true
     files:
       - monitoring/assets/grafana/provisioning/datasources/prometheus.yml
   - name: grafana-dashboard-provider
+    options:
+      disableNameSuffixHash: true
     files:
       - monitoring/assets/grafana/provisioning/dashboards/dashboards.yml
   - name: grafana-dashboards
+    options:
+      disableNameSuffixHash: true
     files:
       - monitoring/assets/dashboard1.json
       - monitoring/assets/dashboard2.json
