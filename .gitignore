@@ -7,4 +7,4 @@ venv/
 data/*.db
 data/*.db-journal
 .DS_Store
-FASE2_IMPLEMENTACAO.md
+ESTADO_PROJETO.md

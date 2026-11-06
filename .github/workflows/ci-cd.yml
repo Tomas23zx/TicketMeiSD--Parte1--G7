@@ -5,9 +5,11 @@ on:
     branches:
       - main
   pull_request:
+  workflow_dispatch:
 
 permissions:
   contents: write
+  packages: write
 
 env:
   REGISTRY: ghcr.io
@@ -15,7 +17,7 @@ env:
 
 jobs:
   validate:
-    name: Validate source and manifests
+    name: Validate source, Docker Compose and k6 tests
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
@@ -43,16 +45,45 @@ jobs:
             order/main.py \
             notification/main.py
 
-      - name: Validate Docker Compose
-        run: docker compose config --quiet
-
       - name: Validate Kubernetes manifests
         run: kubectl kustomize k8s > /dev/null
 
+      - name: Validate Docker Compose config
+        run: docker compose config --quiet
+
+      - name: Start Docker Compose environment (Fases 1 e 2)
+        run: docker compose up -d --build
+
+      - name: Wait for API Gateway to be ready
+        shell: bash
+        run: |
+          for i in {1..30}; do
+            if curl -s http://localhost:8000/metrics > /dev/null; then
+              echo "API Gateway and services are healthy!"
+              break
+            fi
+            echo "Waiting for services to become healthy... ($i/30)"
+            sleep 2
+          done
+          docker compose ps
+
+      - name: Execute automated k6 load tests (RNF4)
+        run: |
+          echo "Running Phase 1 Catalog load test..."
+          docker compose --profile testing run --rm k6 run --duration 10s --vus 5 load-test.js
+          echo "Running Phase 2 Orders & Notifications load test..."
+          docker compose --profile testing run --rm k6 run --duration 10s --vus 5 load-test-phase2.js
+          echo "Running Rate Limiter test (HTTP 429 validation)..."
+          docker compose --profile testing run --rm k6 run rate-limit-test.js
+
+      - name: Stop Docker Compose environment
+        if: always()
+        run: docker compose down -v
+
   publish:
-    name: Build and publish images
+    name: Build, publish images and update K8s tags
     needs: validate
-    if: github.event_name == 'push' && github.actor != 'github-actions[bot]'
+    if: github.event_name == 'push' && github.actor != 'github-actions[bot]' || github.event_name == 'workflow_dispatch'
     runs-on: ubuntu-latest
     permissions:
       contents: write
@@ -60,6 +91,20 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v4
+
+      - name: Check changed files per service (RNF4)
+        uses: dorny/paths-filter@v3
+        id: filter
+        with:
+          filters: |
+            api-gateway:
+              - 'api-gateway/**'
+            catalog:
+              - 'catalog/**'
+            order:
+              - 'order/**'
+            notification:
+              - 'notification/**'
 
       - name: Log in to GHCR
         uses: docker/login-action@v3
@@ -72,6 +117,7 @@ jobs:
         uses: docker/setup-buildx-action@v3
 
       - name: Build and push API Gateway
+        if: steps.filter.outputs.api-gateway == 'true' || github.event_name == 'workflow_dispatch'
         uses: docker/build-push-action@v6
         with:
           context: ./api-gateway
@@ -79,6 +125,7 @@ jobs:
           tags: ${{ env.REGISTRY }}/${{ env.IMAGE_OWNER }}/ticketmei-api-gateway:${{ github.sha }}
 
       - name: Build and push Catalog
+        if: steps.filter.outputs.catalog == 'true' || github.event_name == 'workflow_dispatch'
         uses: docker/build-push-action@v6
         with:
           context: ./catalog
@@ -86,6 +133,7 @@ jobs:
           tags: ${{ env.REGISTRY }}/${{ env.IMAGE_OWNER }}/ticketmei-catalog:${{ github.sha }}
 
       - name: Build and push Order
+        if: steps.filter.outputs.order == 'true' || github.event_name == 'workflow_dispatch'
         uses: docker/build-push-action@v6
         with:
           context: ./order
@@ -93,6 +141,7 @@ jobs:
           tags: ${{ env.REGISTRY }}/${{ env.IMAGE_OWNER }}/ticketmei-order:${{ github.sha }}
 
       - name: Build and push Notification
+        if: steps.filter.outputs.notification == 'true' || github.event_name == 'workflow_dispatch'
         uses: docker/build-push-action@v6
         with:
           context: ./notification
@@ -102,13 +151,32 @@ jobs:
       - name: Update Kubernetes image tags
         shell: bash
         run: |
-          for service in api-gateway catalog order notification; do
-            sed -i -E \
-              "s#(image: ghcr.io/luisgsousaa/ticketmei-${service}:).*#\1${GITHUB_SHA}#" \
-              "k8s/${service}/deployment.yaml"
-          done
+          has_updates=false
+
+          if [ "${{ steps.filter.outputs.api-gateway }}" = "true" ] || [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+            sed -i -E "s#(image: ghcr.io/${IMAGE_OWNER}/ticketmei-api-gateway:).*#\1${GITHUB_SHA}#" "k8s/api-gateway/deployment.yaml"
+            has_updates=true
+          fi
+
+          if [ "${{ steps.filter.outputs.catalog }}" = "true" ] || [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+            sed -i -E "s#(image: ghcr.io/${IMAGE_OWNER}/ticketmei-catalog:).*#\1${GITHUB_SHA}#" "k8s/catalog/deployment.yaml"
+            has_updates=true
+          fi
+
+          if [ "${{ steps.filter.outputs.order }}" = "true" ] || [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+            sed -i -E "s#(image: ghcr.io/${IMAGE_OWNER}/ticketmei-order:).*#\1${GITHUB_SHA}#" "k8s/order/deployment.yaml"
+            has_updates=true
+          fi
+
+          if [ "${{ steps.filter.outputs.notification }}" = "true" ] || [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+            sed -i -E "s#(image: ghcr.io/${IMAGE_OWNER}/ticketmei-notification:).*#\1${GITHUB_SHA}#" "k8s/notification/deployment.yaml"
+            has_updates=true
+          fi
+
+          echo "HAS_UPDATES=${has_updates}" >> "$GITHUB_ENV"
 
       - name: Commit updated Kubernetes manifests
+        if: env.HAS_UPDATES == 'true'
         shell: bash
         run: |
           git config user.name "github-actions[bot]"

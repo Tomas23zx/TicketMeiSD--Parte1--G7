@@ -88,6 +88,8 @@ services:
       REDIS_URL: redis://redis:6379/0
       RATE_LIMIT_REQUESTS: 100
       RATE_LIMIT_WINDOW_SECONDS: 60
+      RATE_LIMIT_ORDER_REQUESTS: 5
+      RATE_LIMIT_ORDER_WINDOW_SECONDS: 1
     depends_on:
       catalog:
         condition: service_started
