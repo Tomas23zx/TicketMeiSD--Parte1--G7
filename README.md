@@ -170,6 +170,18 @@ kubectl delete -k k8s
    ```
    O ArgoCD irá monitorizar a pasta `k8s/` do repositório GitHub e aplicar/reconciliar automaticamente quaisquer alterações no cluster.
 
+4. **Aceder às ferramentas de observabilidade**
+
+    O Grafana fica disponível em [http://localhost:30300](http://localhost:30300) e o
+    Prometheus em [http://localhost:30090](http://localhost:30090).
+
+5. **Remover a aplicação gerida pelo Argo CD**
+
+    ```powershell
+    kubectl delete -f argocd/application.yaml
+    ```
+
+
 ---
 
 ## 🛡️ 4. Mecanismo de Resiliência: Rate Limiting com Redis
