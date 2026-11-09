@@ -138,7 +138,50 @@ kubectl get svc -n ticketmei
 - O serviço `api-gateway` está configurado como `LoadBalancer` (acessível diretamente em `http://localhost:8000`).
 - No Kubernetes, o Prometheus fica disponível na NodePort `30090` e o Grafana na NodePort `30300` (ou via `kubectl port-forward`).
 
-#### 4. Remover os recursos do cluster
+#### 4. Executar os testes k6 no cluster
+
+Execute os testes individualmente. Cada teste tem um Job e um ConfigMap próprios. Os Jobs executam dentro do Kubernetes, gerando tráfego para os serviços monitorizados pelo Prometheus do cluster.
+
+**Teste de carga do catálogo (Fase 1):**
+```powershell
+kubectl create configmap ticketmei-k6-phase1 --from-file=load-test.js=k6/load-test.js -n ticketmei --dry-run=client -o yaml | kubectl apply -f -
+kubectl apply -f k8s/load-testing/job-phase1.yaml
+kubectl logs -n ticketmei -f job/ticketmei-load-test-phase1
+```
+
+**Teste de checkout concorrente (Fase 2):**
+```powershell
+kubectl create configmap ticketmei-k6-phase2 --from-file=load-test-phase2.js=k6/load-test-phase2.js -n ticketmei --dry-run=client -o yaml | kubectl apply -f -
+kubectl apply -f k8s/load-testing/job-phase2.yaml
+kubectl logs -n ticketmei -f job/ticketmei-load-test-phase2
+```
+
+**Teste do rate limiter (HTTP 429):**
+```powershell
+kubectl create configmap ticketmei-k6-rate-limit --from-file=rate-limit-test.js=k6/rate-limit-test.js -n ticketmei --dry-run=client -o yaml | kubectl apply -f -
+kubectl apply -f k8s/load-testing/job-rate-limit.yaml
+kubectl logs -n ticketmei -f job/ticketmei-rate-limit-test
+```
+
+O ficheiro `k6/load_test.js` é um alias do teste do catálogo (`k6/load-test.js`), não um teste separado. Para ver o estado dos Jobs e pods:
+```powershell
+kubectl get jobs,pods -n ticketmei
+```
+
+Consulte os dashboards no [Grafana](http://localhost:30300) e confirme que o target `api-gateway` está `UP` nos [targets do Prometheus](http://localhost:30090/targets). Para repetir um teste, apague apenas o Job correspondente e volte a aplicar o respetivo manifesto. Por exemplo, para a Fase 2:
+```powershell
+kubectl delete job ticketmei-load-test-phase2 -n ticketmei
+kubectl apply -f k8s/load-testing/job-phase2.yaml
+```
+
+Para interromper um teste antes de terminar, apague o respetivo Job:
+```powershell
+kubectl delete job ticketmei-load-test-phase1 -n ticketmei
+kubectl delete job ticketmei-load-test-phase2 -n ticketmei
+kubectl delete job ticketmei-rate-limit-test -n ticketmei
+```
+
+#### 5. Remover os recursos do cluster
 ```powershell
 kubectl delete -k k8s
 ```

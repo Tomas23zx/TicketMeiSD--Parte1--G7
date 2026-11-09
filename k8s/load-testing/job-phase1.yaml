@@ -1,0 +1,27 @@
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: ticketmei-load-test-phase1
+  namespace: ticketmei
+spec:
+  backoffLimit: 0
+  ttlSecondsAfterFinished: 3600
+  template:
+    spec:
+      restartPolicy: Never
+      containers:
+        - name: k6
+          image: grafana/k6:0.49.0
+          command:
+            - k6
+            - run
+            - /scripts/load-test.js
+          volumeMounts:
+            - name: script
+              mountPath: /scripts/load-test.js
+              subPath: load-test.js
+              readOnly: true
+      volumes:
+        - name: script
+          configMap:
+            name: ticketmei-k6-phase1
