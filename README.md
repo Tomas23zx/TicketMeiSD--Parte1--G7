@@ -174,6 +174,12 @@ kubectl delete job ticketmei-load-test-phase2 -n ticketmei
 kubectl apply -f k8s/load-testing/job-phase2.yaml
 ```
 
+O dashboard **TicketMei - Rate Limiting** fica na pasta `Ticketmei` do Grafana e mostra checkouts aceites (`202`), bloqueados (`429`), total de bloqueios e percentagem bloqueada. Para o carregar no cluster:
+```powershell
+kubectl apply -k k8s
+kubectl rollout restart deployment/grafana -n ticketmei
+```
+
 Para interromper um teste antes de terminar, apague o respetivo Job:
 ```powershell
 kubectl delete job ticketmei-load-test-phase1 -n ticketmei

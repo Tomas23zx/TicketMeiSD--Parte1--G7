@@ -119,6 +119,7 @@ services:
       - ./grafana/provisioning:/etc/grafana/provisioning:ro
       - ./dashboard1.json:/var/lib/grafana/dashboards/gateway.json:ro
       - ./dashboard2.json:/var/lib/grafana/dashboards/phase2.json:ro
+      - ./dashboard-rate-limit.json:/var/lib/grafana/dashboards/rate-limit.json:ro
     depends_on:
       - prometheus
     networks:
