@@ -31,6 +31,10 @@ spec:
               value: "100"
             - name: RATE_LIMIT_WINDOW_SECONDS
               value: "60"
+            - name: RATE_LIMIT_ORDER_REQUESTS
+              value: "5"
+            - name: RATE_LIMIT_ORDER_WINDOW_SECONDS
+              value: "1"
           readinessProbe:
             httpGet:
               path: /metrics

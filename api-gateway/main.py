@@ -16,6 +16,9 @@ ORDER_URL = os.getenv("ORDER_URL", "http://order:8002").rstrip("/")
 REDIS_URL = os.getenv("REDIS_URL", "redis://redis:6379/0")
 RATE_LIMIT_REQUESTS = int(os.getenv("RATE_LIMIT_REQUESTS", "100"))
 RATE_LIMIT_WINDOW_SECONDS = int(os.getenv("RATE_LIMIT_WINDOW_SECONDS", "60"))
+# Limite específico para checkout de ordens (conforme RNF3: ex. 5 pedidos/segundo por IP)
+RATE_LIMIT_ORDER_REQUESTS = int(os.getenv("RATE_LIMIT_ORDER_REQUESTS", "5"))
+RATE_LIMIT_ORDER_WINDOW_SECONDS = int(os.getenv("RATE_LIMIT_ORDER_WINDOW_SECONDS", "1"))
 
 RATE_LIMIT_SCRIPT = """
 local count = redis.call('INCR', KEYS[1])
@@ -61,13 +64,26 @@ async def rate_limit_requests(request: Request, call_next):
         return await call_next(request)
 
     client_host = request.client.host if request.client else "unknown"
-    key = f"ticketmei:rate-limit:{client_host}"
+
+    # Aplica limite dedicado para POST /orders (ou /order) conforme RNF3 (ex.: 5 req/s)
+    path = request.url.path.rstrip("/")
+    is_order_post = request.method == "POST" and path in ("/orders", "/order")
+
+    if is_order_post:
+        limit_requests = RATE_LIMIT_ORDER_REQUESTS
+        window_seconds = RATE_LIMIT_ORDER_WINDOW_SECONDS
+        key = f"ticketmei:rate-limit:order:{client_host}"
+    else:
+        limit_requests = RATE_LIMIT_REQUESTS
+        window_seconds = RATE_LIMIT_WINDOW_SECONDS
+        key = f"ticketmei:rate-limit:general:{client_host}"
+
     try:
         count, ttl_milliseconds = await request.app.state.redis.eval(
             RATE_LIMIT_SCRIPT,
             1,
             key,
-            RATE_LIMIT_WINDOW_SECONDS,
+            window_seconds,
         )
     except RedisError as exc:
         raise HTTPException(
@@ -75,17 +91,17 @@ async def rate_limit_requests(request: Request, call_next):
             detail="Rate limiting service is unavailable",
         ) from exc
 
-    remaining = max(RATE_LIMIT_REQUESTS - int(count), 0)
+    remaining = max(limit_requests - int(count), 0)
     headers = {
-        "X-RateLimit-Limit": str(RATE_LIMIT_REQUESTS),
+        "X-RateLimit-Limit": str(limit_requests),
         "X-RateLimit-Remaining": str(remaining),
     }
-    if int(count) > RATE_LIMIT_REQUESTS:
+    if int(count) > limit_requests:
         retry_after = max(ceil(int(ttl_milliseconds) / 1000), 1)
         headers["Retry-After"] = str(retry_after)
         return JSONResponse(
             status_code=429,
-            content={"detail": "Too many requests"},
+            content={"detail": "Too many requests. Rate limit exceeded."},
             headers=headers,
         )
 
@@ -188,6 +204,11 @@ async def create_order(request: Request):
     )
 
 
+@app.post("/order")
+async def create_order_alias(request: Request):
+    return await create_order(request)
+
+
 @app.get("/orders/{order_id}")
 async def get_order(order_id: int, request: Request):
     try:
@@ -210,6 +231,11 @@ async def get_order(order_id: int, request: Request):
     )
 
 
+@app.get("/order/{order_id}")
+async def get_order_alias(order_id: int, request: Request):
+    return await get_order(order_id, request)
+
+
 @app.get("/orders")
 async def list_orders(request: Request):
     try:
@@ -230,6 +256,11 @@ async def list_orders(request: Request):
             )
         },
     )
+
+
+@app.get("/order")
+async def list_orders_alias(request: Request):
+    return await list_orders(request)
 
 
 @app.get("/metrics")
