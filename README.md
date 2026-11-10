@@ -210,7 +210,7 @@ kubectl delete -k k8s
    - Utilizador: `admin`
    - Password inicial:
      ```powershell
-     kubectl -n argocd get secret argocd-initial-admin-secret -o jsonpath="{.data.password}" | [System.Text.Encoding]::UTF8.GetString([System.Convert]::FromBase64String($input))
+    kubectl -n argocd get secret argocd-initial-admin-secret -o jsonpath="{.data.password}" | ForEach-Object { [System.Text.Encoding]::UTF8.GetString([System.Convert]::FromBase64String($_)) }
      ```
 
 3. **Submeter a aplicação ArgoCD:**
