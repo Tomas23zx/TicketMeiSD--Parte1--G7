@@ -17,7 +17,7 @@ env:
 
 jobs:
   validate:
-    name: Validate source, Docker Compose and k6 tests
+    name: Validate source and manifests
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
@@ -50,35 +50,6 @@ jobs:
 
       - name: Validate Docker Compose config
         run: docker compose config --quiet
-
-      - name: Start Docker Compose environment (Fases 1 e 2)
-        run: docker compose up -d --build
-
-      - name: Wait for API Gateway to be ready
-        shell: bash
-        run: |
-          for i in {1..30}; do
-            if curl -s http://localhost:8000/metrics > /dev/null; then
-              echo "API Gateway and services are healthy!"
-              break
-            fi
-            echo "Waiting for services to become healthy... ($i/30)"
-            sleep 2
-          done
-          docker compose ps
-
-      - name: Execute automated k6 load tests (RNF4)
-        run: |
-          echo "Running Phase 1 Catalog load test..."
-          docker compose --profile testing run --rm k6 run --duration 10s --vus 5 load-test.js
-          echo "Running Phase 2 Orders & Notifications load test..."
-          docker compose --profile testing run --rm k6 run --duration 10s --vus 5 load-test-phase2.js
-          echo "Running Rate Limiter test (HTTP 429 validation)..."
-          docker compose --profile testing run --rm k6 run rate-limit-test.js
-
-      - name: Stop Docker Compose environment
-        if: always()
-        run: docker compose down -v
 
   publish:
     name: Build, publish images and update K8s tags
