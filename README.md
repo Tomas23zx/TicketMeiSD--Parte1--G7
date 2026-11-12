@@ -4,8 +4,6 @@ Projeto desenvolvido no âmbito da unidade curricular de **Sistemas Distribuído
 **Grupo:** G7  
 **Repositório:** [Tomas23zx/TicketMeiSD--Parte1--G7](https://github.com/Tomas23zx/TicketMeiSD--Parte1--G7)
 
-> 📌 **Estado Detalhado do Projeto:** Consulte o ficheiro [ESTADO_PROJETO.md](ESTADO_PROJETO.md) para a auditoria completa de requisitos do enunciado (o que está feito, o que falta fazer e roadmap para a avaliação).
-
 ---
 
 ## 📖 1. Visão Geral e Arquitetura
