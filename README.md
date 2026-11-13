@@ -321,11 +321,3 @@ curl http://localhost:8000/orders/1
 # 6. Inspecionar o registo de envio de email na Notification
 curl http://localhost:8003/notifications
 ```
-
----
-
-
-3. **Demonstração do Rate Limiter (HTTP 429):**
-   - Execute o script `docker compose run --rm k6 run rate-limit-test.js` ou um loop de requisições rápidas.
-   - Mostre as respostas com status `HTTP 429 Too Many Requests` e os cabeçalhos `X-RateLimit-*` e `Retry-After`.
-   - Mostre o gráfico de taxa de erros HTTP a subir momentaneamente no dashboard do Grafana.
