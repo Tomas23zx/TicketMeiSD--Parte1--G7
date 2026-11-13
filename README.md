@@ -324,18 +324,7 @@ curl http://localhost:8003/notifications
 
 ---
 
-## 🎓 8. Roteiro para a Demonstração nas Aulas (04 a 11 de Novembro)
 
-Para a apresentação presencial solicitada no enunciado, siga este guião:
-
-1. **Demonstração dos Endpoints e Desempenho com k6:**
-   - Execute o script `docker compose run --rm k6 run load-test-phase2.js`.
-   - Abra o Grafana em `http://localhost:3000` no painel **TicketMei - P2: Orders, Notifications & RabbitMQ** e mostre as métricas em tempo real (Throughput de pedidos, profundidade da fila RabbitMQ a ser consumida em ~100ms e notificações enviadas).
-2. **Demonstração do Ciclo GitOps Automatizado:**
-   - Efetue uma alteração visível no código (por exemplo, na mensagem de resposta de um endpoint).
-   - Efetue `git commit` e `git push` para a branch `main`.
-   - Mostre no GitHub a execução bem-sucedida do workflow de CI/CD (geração da imagem e atualização da tag nos manifestos).
-   - Mostre no ArgoCD ou via `kubectl get pods -n ticketmei -w` a reconciliação e o rolling update dos pods a acontecer automaticamente sem comandos manuais.
 3. **Demonstração do Rate Limiter (HTTP 429):**
    - Execute o script `docker compose run --rm k6 run rate-limit-test.js` ou um loop de requisições rápidas.
    - Mostre as respostas com status `HTTP 429 Too Many Requests` e os cabeçalhos `X-RateLimit-*` e `Retry-After`.
