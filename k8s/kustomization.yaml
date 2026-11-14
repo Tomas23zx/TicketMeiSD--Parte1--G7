@@ -18,6 +18,9 @@ resources:
   - notification/deployment.yaml
   - notification/service.yaml
   - notification/pvc.yaml
+  - payment/deployment.yaml
+  - payment/service.yaml
+  - payment/pvc.yaml
   - api-gateway/deployment.yaml
   - api-gateway/service.yaml
   - monitoring/prometheus-configmap.yaml

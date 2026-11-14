@@ -77,6 +77,18 @@ services:
     networks:
       - ticketmei-net
 
+  payment:
+    build: ./payment
+    container_name: payment
+    ports:
+      - "8004:8004"
+    environment:
+      DATABASE_PATH: /app/data/payment.db
+    volumes:
+      - ./data:/app/data
+    networks:
+      - ticketmei-net
+
   api-gateway:
     build: ./api-gateway
     container_name: api-gateway

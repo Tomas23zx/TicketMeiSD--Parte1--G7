@@ -64,6 +64,7 @@ O **TicketMEI** é uma plataforma distribuída baseada numa arquitetura de micro
 | **Catalog** | [`catalog/`](catalog/) | Serviço de catálogo de eventos. Serve os dados estáticos de `events.json` via endpoints síncronos e expõe métricas de latência e pedidos. | FastAPI, Python 3.12 |
 | **Order** | [`order/`](order/) | Gere o fluxo provisório de checkout. Valida limite de bilhetes (máx 4), regista no SQLite (`order.db`) com estado `PENDING` e publica mensagem `OrderCreated` no RabbitMQ. | FastAPI, SQLite, aio-pika |
 | **Notification** | [`notification/`](notification/) | Consome mensagens do RabbitMQ de forma assíncrona, simula envio de email (100 ms) e regista auditoria no SQLite (`notification.db`) e ficheiro `notification_logs.json`. | FastAPI, aio-pika, SQLite |
+| **Payment** | [`payment/`](payment/) | Processa pagamentos de forma isolada, com injeção configurável de falhas/latência, persistência SQLite (`payment.db`) e métricas Prometheus. | FastAPI, SQLite |
 | **RabbitMQ** | - | Message Broker AMQP para comunicação desacoplada e assíncrona entre Order e Notification. Disponibiliza porta AMQP (5672), UI de gestão (15672) e métricas (15692). | Imagem oficial `rabbitmq:3.13-management` |
 | **Redis** | - | Armazenamento chave-valor em memória utilizado pelo Rate Limiter do API Gateway com script Lua atómico para contagem e expiração por IP. | Imagem oficial `redis:7-alpine` |
 | **Prometheus** | [`prometheus/`](prometheus/) | Motor de métricas time-series. Faz scraping contínuo (intervalo de 5s) dos microsserviços, RabbitMQ e cAdvisor. | Imagem oficial `prom/prometheus:v2.50.0` |
@@ -103,6 +104,17 @@ Todos os contentores (`api-gateway`, `catalog`, `order`, `notification`, `rabbit
 - **Teste de Validação do Rate Limiter (HTTP 429):**
   ```powershell
   docker compose run --rm k6 run rate-limit-test.js
+  ```
+
+- **Teste manual do Payment:**
+  ```powershell
+  kubectl port-forward -n ticketmei svc/payment 8004:8004
+
+  $faults = '{"error_rate":0,"latency_seconds":0}'
+  Invoke-RestMethod -Uri http://localhost:8004/payments/configure-faults -Method Post -ContentType 'application/json' -Body $faults
+  $payment = '{"order_id":1,"amount":50.0}'
+  Invoke-RestMethod -Uri http://localhost:8004/payments -Method Post -ContentType 'application/json' -Body $payment
+  Invoke-WebRequest -Uri http://localhost:8004/metrics
   ```
 
 #### 4. Parar os serviços
@@ -208,7 +220,7 @@ kubectl delete -k k8s
    - Utilizador: `admin`
    - Password inicial:
      ```powershell
-    kubectl -n argocd get secret argocd-initial-admin-secret -o jsonpath="{.data.password}" | ForEach-Object { [System.Text.Encoding]::UTF8.GetString([System.Convert]::FromBase64String($_)) }
+     kubectl -n argocd get secret argocd-initial-admin-secret -o jsonpath="{.data.password}" | ForEach-Object { [System.Text.Encoding]::UTF8.GetString([System.Convert]::FromBase64String($_)) }
      ```
 
 3. **Submeter a aplicação ArgoCD:**
@@ -288,6 +300,9 @@ Com os serviços em execução, aceda aos seguintes URLs:
 | **Order - Métricas** | [http://localhost:8002/metrics](http://localhost:8002/metrics) | Cluster interno (`:8002/metrics`) | Métricas do serviço de compras |
 | **Notification - Métricas** | [http://localhost:8003/metrics](http://localhost:8003/metrics) | Cluster interno (`:8003/metrics`) | Métricas do serviço de notificações |
 | **Notification - Lista de Notificações** | [http://localhost:8003/notifications](http://localhost:8003/notifications) | Cluster interno (`:8003/notifications`) | Registo de notificações processadas |
+| **Payment - Configurar Falhas** | `POST http://localhost:8004/payments/configure-faults` | `POST http://payment:8004/payments/configure-faults` | Configura taxa de erro e latência artificial |
+| **Payment - Processar Pagamento** | `POST http://localhost:8004/payments` | `POST http://payment:8004/payments` | Regista pagamentos com estado `SUCCESS` |
+| **Payment - Métricas** | [http://localhost:8004/metrics](http://localhost:8004/metrics) | Cluster interno (`:8004/metrics`) | Métricas de pedidos e duração do processamento |
 | **RabbitMQ - Consola de Gestão** | [http://localhost:15672](http://localhost:15672) | Cluster interno / Port-forward | Web UI RabbitMQ (user: `guest` / pass: `guest`) |
 | **Prometheus Web UI** | [http://localhost:9090](http://localhost:9090) | [http://localhost:30090](http://localhost:30090) | Interface de consulta do Prometheus |
 | **Grafana Dashboard Fase 1** | [http://localhost:3000](http://localhost:3000) | [http://localhost:30300](http://localhost:30300) | Painel Gateway e Catálogo (admin / admin) |
