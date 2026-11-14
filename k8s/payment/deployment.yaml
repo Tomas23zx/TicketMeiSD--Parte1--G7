@@ -15,7 +15,7 @@ spec:
     spec:
       containers:
         - name: payment
-          image: ghcr.io/luisgsousaa/ticketmei-payment:c9cd5edc84ec1da27f32a9981f22c89df9a8f394
+          image: ghcr.io/luisgsousaa/ticketmei-payment:4573cec968de191e0f7bfc6a5f1442c8f5e76551
           imagePullPolicy: Always
           ports:
             - name: http
