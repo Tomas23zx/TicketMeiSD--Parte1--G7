@@ -25,6 +25,8 @@ spec:
               value: amqp://guest:guest@rabbitmq:5672/
             - name: DATABASE_PATH
               value: /app/data/order.db
+            - name: PAYMENT_URL
+              value: http://payment:8004/payments
           volumeMounts:
             - name: order-data
               mountPath: /app/data

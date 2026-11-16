@@ -39,7 +39,7 @@ export default function () {
 
   const orderRes = http.post(`${gatewayUrl}/orders`, orderPayload, orderParams);
   check(orderRes, {
-    'order checkout status is 202': (r) => r.status === 202,
+    'order checkout status is 201': (r) => r.status === 201,
   });
 
   sleep(0.1);

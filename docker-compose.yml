@@ -52,6 +52,7 @@ services:
     environment:
       RABBITMQ_URL: amqp://guest:guest@rabbitmq:5672/
       DATABASE_PATH: /app/data/order.db
+      PAYMENT_URL: http://payment:8004/payments
     volumes:
       - ./data:/app/data
     depends_on:
