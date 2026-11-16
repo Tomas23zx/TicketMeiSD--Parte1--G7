@@ -108,8 +108,6 @@ Todos os contentores (`api-gateway`, `catalog`, `order`, `notification`, `rabbit
 
 - **Teste manual do Payment:**
   ```powershell
-  kubectl port-forward -n ticketmei svc/payment 8004:8004
-
   $faults = '{"error_rate":0,"latency_seconds":0}'
   Invoke-RestMethod -Uri http://localhost:8004/payments/configure-faults -Method Post -ContentType 'application/json' -Body $faults
   $payment = '{"order_id":1,"amount":50.0}'
@@ -148,7 +146,27 @@ kubectl get svc -n ticketmei
 - O serviço `api-gateway` está configurado como `LoadBalancer` (acessível diretamente em `http://localhost:8000`).
 - No Kubernetes, o Prometheus fica disponível na NodePort `30090` e o Grafana na NodePort `30300` (ou via `kubectl port-forward`).
 
-#### 4. Executar os testes k6 no cluster
+#### 4. Aceder aos serviços a partir da máquina local
+
+Os serviços `Order` e `Payment` usam Services internos do Kubernetes e não ficam
+automaticamente disponíveis em `localhost`. Para executar testes manuais, abra
+terminais separados e mantenha estes port-forwards ativos:
+
+```powershell
+kubectl port-forward -n ticketmei svc/order 8002:8002
+kubectl port-forward -n ticketmei svc/payment 8004:8004
+```
+
+Para aceder à interface de gestão do RabbitMQ:
+
+```powershell
+kubectl port-forward -n ticketmei svc/rabbitmq 15672:15672
+```
+
+Depois, a interface fica disponível em
+`http://localhost:15672` com as credenciais `guest` / `guest`.
+
+#### 5. Executar os testes k6 no cluster
 
 Execute os testes individualmente. Cada teste tem um Job e um ConfigMap próprios. Os Jobs executam dentro do Kubernetes, gerando tráfego para os serviços monitorizados pelo Prometheus do cluster.
 
