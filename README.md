@@ -115,6 +115,29 @@ Todos os contentores (`api-gateway`, `catalog`, `order`, `notification`, `rabbit
   Invoke-WebRequest -Uri http://localhost:8004/metrics
   ```
 
+- **Teste de resiliência do Order/Payment (Circuit Breaker e Retry):**
+
+  No `docker-compose.yml`, altere temporariamente
+  `RATE_LIMIT_ORDER_REQUESTS` de `5` para `100` e recria o Gateway:
+
+  ```powershell
+  docker compose up -d --build
+  docker compose run --rm k6 run load_test_payment_resilience.js
+  ```
+
+  Enquanto o teste estiver a executar, injeta falhas no Payment:
+
+  ```powershell
+  .\k6\inject_faults.ps1 -PaymentUrl http://localhost:8004
+  ```
+
+  No final, repõe `RATE_LIMIT_ORDER_REQUESTS` para `5` no
+  `docker-compose.yml` e recria o Gateway:
+
+  ```powershell
+  docker compose up -d --force-recreate api-gateway
+  ```
+
 #### 4. Parar os serviços
 ```powershell
 docker compose down
@@ -175,6 +198,55 @@ Execute os testes individualmente. Cada teste tem um Job e um ConfigMap próprio
 kubectl create configmap ticketmei-k6-phase1 --from-file=load-test.js=k6/load-test.js -n ticketmei --dry-run=client -o yaml | kubectl apply -f -
 kubectl apply -f k8s/load-testing/job-phase1.yaml
 kubectl logs -n ticketmei -f job/ticketmei-load-test-phase1
+```
+
+**Teste de resiliência do Order/Payment (Circuit Breaker e Retry):**
+
+O teste k6 gera 50 pedidos por segundo durante 5 minutos. Como o rate
+limiter do Gateway tem, por defeito, um limite de 5 pedidos por segundo por
+IP, aumenta-se temporariamente esse limite para que o teste consiga gerar a
+carga pretendida:
+
+```powershell
+kubectl set env deployment/api-gateway -n ticketmei RATE_LIMIT_ORDER_REQUESTS=100
+kubectl rollout status deployment/api-gateway -n ticketmei
+```
+
+O script é carregado para um ConfigMap. O ConfigMap é recriado/atualizado
+com o conteúdo atual de `k6/load_test_payment_resilience.js`:
+
+```powershell
+kubectl create configmap ticketmei-k6-resilience --from-file=load_test_payment_resilience.js=k6/load_test_payment_resilience.js -n ticketmei --dry-run=client -o yaml | kubectl apply -f -
+```
+
+Como um Job concluído não pode ser executado novamente com o mesmo nome, o
+Job anterior é removido, se existir. Depois é criado um novo Job que executa
+o k6 dentro do cluster, usando o DNS interno `http://api-gateway:8000`:
+
+```powershell
+kubectl delete job ticketmei-load-test-resilience -n ticketmei --ignore-not-found
+kubectl apply -f k8s/load-testing/job-resilience.yaml
+kubectl logs -n ticketmei -f job/ticketmei-load-test-resilience
+```
+
+Enquanto o Job estiver a executar, a injeção de falhas pode ser executada em
+paralelo. Primeiro expõe o Payment localmente:
+
+```powershell
+kubectl port-forward -n ticketmei svc/payment 8004:8004
+```
+
+Noutro terminal, executa:
+
+```powershell
+.\k6\inject_faults.ps1
+```
+
+O script injeta 80% de erros durante 2 minutos e depois restaura o Payment.
+No fim do teste, pode repor-se o limite normal do Gateway:
+
+```powershell
+kubectl set env deployment/api-gateway -n ticketmei RATE_LIMIT_ORDER_REQUESTS=5
 ```
 
 **Teste de checkout concorrente (Fase 2):**

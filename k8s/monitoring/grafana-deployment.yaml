@@ -47,6 +47,10 @@ spec:
               mountPath: /var/lib/grafana/dashboards/dashboard-rate-limit.json
               subPath: dashboard-rate-limit.json
               readOnly: true
+            - name: grafana-dashboards
+              mountPath: /var/lib/grafana/dashboards/dashboard-payment-resilience.json
+              subPath: dashboard-fase1.json
+              readOnly: true
           readinessProbe:
             httpGet:
               path: /api/health

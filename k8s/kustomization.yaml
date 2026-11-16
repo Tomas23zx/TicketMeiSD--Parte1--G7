@@ -46,3 +46,4 @@ configMapGenerator:
       - monitoring/assets/dashboard1.json
       - monitoring/assets/dashboard2.json
       - monitoring/assets/dashboard-rate-limit.json
+      - monitoring/assets/dashboard-payment-resilience.json
