@@ -34,6 +34,11 @@ data:
         static_configs:
           - targets: ["payment:8004"]
 
+      - job_name: inventory
+        metrics_path: /metrics
+        static_configs:
+          - targets: ["inventory:8005"]
+
       - job_name: rabbitmq
         metrics_path: /metrics
         static_configs:

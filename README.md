@@ -65,12 +65,13 @@ O **TicketMEI** é uma plataforma distribuída baseada numa arquitetura de micro
 | **Order** | [`order/`](order/) | Gere o fluxo provisório de checkout. Valida limite de bilhetes (máx 4), regista no SQLite (`order.db`) com estado `PENDING` e publica mensagem `OrderCreated` no RabbitMQ. | FastAPI, SQLite, aio-pika |
 | **Notification** | [`notification/`](notification/) | Consome mensagens do RabbitMQ de forma assíncrona, simula envio de email (100 ms) e regista auditoria no SQLite (`notification.db`) e ficheiro `notification_logs.json`. | FastAPI, aio-pika, SQLite |
 | **Payment** | [`payment/`](payment/) | Processa pagamentos de forma isolada, com injeção configurável de falhas/latência, persistência SQLite (`payment.db`) e métricas Prometheus. | FastAPI, SQLite |
+| **Inventory** | [`inventory/`](inventory/) | Gere o stock por evento com reservas e libertações atómicas, persistência SQLite (`inventory.db`) e métricas Prometheus. | FastAPI, SQLite |
 | **RabbitMQ** | - | Message Broker AMQP para comunicação desacoplada e assíncrona entre Order e Notification. Disponibiliza porta AMQP (5672), UI de gestão (15672) e métricas (15692). | Imagem oficial `rabbitmq:3.13-management` |
 | **Redis** | - | Armazenamento chave-valor em memória utilizado pelo Rate Limiter do API Gateway com script Lua atómico para contagem e expiração por IP. | Imagem oficial `redis:7-alpine` |
 | **Prometheus** | [`prometheus/`](prometheus/) | Motor de métricas time-series. Faz scraping contínuo (intervalo de 5s) dos microsserviços, RabbitMQ e cAdvisor. | Imagem oficial `prom/prometheus:v2.50.0` |
-| **Grafana** | [`grafana/`](grafana/) | Dashboards provisionados automaticamente: **Dashboard 1** (Fase 1: Gateway, Latências p95/p99, Erros HTTP) e **Dashboard 2** (Fase 2: Orders, Notifications, Fila RabbitMQ). | Imagem oficial `grafana/grafana:10.3.1` |
+| **Grafana** | [`grafana/`](grafana/) | Dashboards provisionados automaticamente: Gateway, Orders/Notifications, rate limiting, resiliência Payment e **Inventory & Sagas** (stock, reservas, compensações e latência por resultado). | Imagem oficial `grafana/grafana:10.3.1` |
 | **cAdvisor** | - | Monitorização de recursos ao nível de contentores Docker (CPU, Memória, Rede). | `gcr.io/cadvisor/cadvisor:v0.47.2` |
-| **k6** | [`k6/`](k6/) | Scripts de testes de carga e validação: `load-test.js` (catálogo), `load-test-phase2.js` (checkout concorrente) e `rate-limit-test.js` (teste do HTTP 429). | Imagem oficial `grafana/k6:0.49.0` |
+| **k6** | [`k6/`](k6/) | Scripts de testes de carga e validação: `load-test.js` (catálogo), `load-test-phase2.js` (checkout concorrente), `load-test-saga-1000.js` (1000 VUs sobre o Inventory) e `rate-limit-test.js` (teste do HTTP 429). | Imagem oficial `grafana/k6:0.49.0` |
 | **Kubernetes** | [`k8s/`](k8s/) | Manifestos K8s estruturados com Kustomize (Namespace, Deployments, Services, ConfigMaps, PVCs). | Kubernetes v1.28+, Kustomize |
 | **ArgoCD** | [`argocd/`](argocd/) | Orquestrador GitOps que reconcilia automaticamente as alterações na pasta `k8s/` com o cluster local. | ArgoCD Application CRD |
 
@@ -79,6 +80,8 @@ O **TicketMEI** é uma plataforma distribuída baseada numa arquitetura de micro
 ## 🚀 3. Como Executar o Projeto
 
 ### Opção A: Execução com Docker Compose (Fases 1 e 2)
+
+> **Importante:** os comandos nos blocos `powershell` devem ser executados num terminal PowerShell, não no Prompt de Comando (`cmd.exe`). Se o prompt mostrar `C:\...>`, escreve `powershell` e executa os comandos quando aparecer `PS C:\...>`. Cola os blocos PowerShell completos, incluindo `try`, `catch` e `finally`.
 
 #### 1. Iniciar toda a infraestrutura
 Na raiz do repositório, execute:
@@ -101,6 +104,69 @@ Todos os contentores (`api-gateway`, `catalog`, `order`, `notification`, `rabbit
   ```powershell
   docker compose run --rm k6 run load-test-phase2.js
   ```
+- **Teste de concorrência da Saga (1000 VUs, stock inicial de 20):**
+  ```powershell
+  $env:EVENT_ID = "evt-saga-loadtest-$([DateTimeOffset]::UtcNow.ToUnixTimeSeconds())"
+  docker compose run --rm -e "EVENT_ID=$env:EVENT_ID" k6 run /ci-scripts/load-test-saga-1000.js
+  ```
+  O `setup()` do script cria automaticamente o evento com 20 bilhetes. O cenário envia 1000 checkouts concorrentes diretamente ao serviço Order, sem passar pelo rate limiter do Gateway. O teste só passa se o k6 confirmar **20 respostas HTTP 201**, **980 respostas HTTP 409** por falta de stock e nenhuma resposta inesperada.
+
+  Depois de iniciar o teste, abra o [dashboard Inventory & Sagas](http://localhost:3000/d/ticketmei-inventory-sagas/ticketmei-inventory-sagas) no Grafana. Se o dashboard já estava aberto antes de criar o evento, atualize a página para o incluir no filtro **Evento**. Observe o stock, as reservas, os contadores e as latências. Confirme também o stock final:
+  ```powershell
+  Invoke-RestMethod -Uri "http://localhost:8005/inventory/$env:EVENT_ID"
+  ```
+  Resultado esperado: `total_tickets = 20` e `available_tickets = 0`. Para validar as três bases de dados depois do teste:
+  ```powershell
+  docker compose exec -T order python -c "import sqlite3; e='$env:EVENT_ID'; db=sqlite3.connect('/app/data/order.db'); db.execute('ATTACH DATABASE ? AS payment', ('/app/data/payment.db',)); db.execute('ATTACH DATABASE ? AS inventory', ('/app/data/inventory.db',)); print('Orders:', db.execute('SELECT status, COUNT(*) FROM orders WHERE event_id=? GROUP BY status', (e,)).fetchall()); print('Payments:', db.execute('SELECT p.status, COUNT(*) FROM payment.Payment p JOIN orders o ON o.id=p.order_id WHERE o.event_id=? GROUP BY p.status', (e,)).fetchall()); print('Inventory:', db.execute('SELECT total_tickets, available_tickets FROM inventory.inventory WHERE event_id=?', (e,)).fetchone())"
+  ```
+  Esperado: 20 orders `CONFIRMED`, 980 `FAILED`, 20 pagamentos `SUCCESS` e stock `(20, 0)`.
+
+  **Importante:** os 980 pedidos sem bilhetes são abortados antes do pagamento; não executam compensação. Executa primeiro o teste de carga bem-sucedido e depois o cenário seguinte para recolher amostras de compensação:
+  ```powershell
+  $env:COMP_EVENT_ID = "evt-saga-comp-$([DateTimeOffset]::UtcNow.ToUnixTimeSeconds())"
+  $stock = @{ event_id = $env:COMP_EVENT_ID; total_tickets = 1 } | ConvertTo-Json -Compress
+  Invoke-RestMethod -Uri http://localhost:8005/inventory/stock -Method Post -ContentType 'application/json' -Body $stock
+
+  $faults = @{ error_rate = 100; latency_seconds = 0 } | ConvertTo-Json -Compress
+  Invoke-RestMethod -Uri http://localhost:8004/payments/configure-faults -Method Post -ContentType 'application/json' -Body $faults
+  try {
+      1..20 | ForEach-Object {
+          $n = $_
+          $order = @{
+              customer_id = 990000 + $n
+              event_id = $env:COMP_EVENT_ID
+              quantity = 1
+              total_amount = 50
+              customer_email = "saga-comp-$n@ticketmei.pt"
+          } | ConvertTo-Json -Compress
+          try {
+              Invoke-RestMethod -Uri http://localhost:8002/orders -Method Post -ContentType 'application/json' -Body $order
+              throw "O checkout devia ter falhado com HTTP 503."
+          } catch {
+              if ($null -eq $_.Exception.Response -or [int]$_.Exception.Response.StatusCode -ne 503) { throw }
+              Write-Host "Compensação $n/20: HTTP 503 esperado."
+          }
+      }
+  } finally {
+      $faultsOff = @{ error_rate = 0; latency_seconds = 0 } | ConvertTo-Json -Compress
+      Invoke-RestMethod -Uri http://localhost:8004/payments/configure-faults -Method Post -ContentType 'application/json' -Body $faultsOff
+  }
+  $inventory = Invoke-RestMethod -Uri "http://localhost:8005/inventory/$env:COMP_EVENT_ID"
+  if ($inventory.available_tickets -ne 1) { throw "A compensação não repôs o bilhete." }
+  $inventory
+  ```
+  Cada checkout deve responder HTTP 503 e libertar o bilhete. No fim, o resultado esperado é `available_tickets = 1`; o dashboard deve registar 20 compensações com outcome `success`.
+
+  Valide também a consistência nas bases de dados:
+  ```powershell
+  docker compose exec -T order python -c "import sqlite3; e='$env:COMP_EVENT_ID'; db=sqlite3.connect('/app/data/order.db'); db.execute('ATTACH DATABASE ? AS payment', ('/app/data/payment.db',)); db.execute('ATTACH DATABASE ? AS inventory', ('/app/data/inventory.db',)); print('Orders:', db.execute('SELECT status, COUNT(*) FROM orders WHERE event_id=? GROUP BY status', (e,)).fetchall()); print('Payments:', db.execute('SELECT p.status, COUNT(*) FROM payment.Payment p JOIN orders o ON o.id=p.order_id WHERE o.event_id=? GROUP BY p.status', (e,)).fetchall()); print('Inventory:', db.execute('SELECT total_tickets, available_tickets FROM inventory.inventory WHERE event_id=?', (e,)).fetchone())"
+  ```
+  Esperado: 20 orders `FAILED`, nenhum pagamento bem-sucedido e stock `(1, 1)`.
+
+  Para comparar latências, abre o painel **Latência p95 da Saga por resultado** no Grafana. A linha `success` vem dos checkouts pagos e confirmados; `compensated` vem dos checkouts em que o pagamento falhou e o bilhete foi libertado. Executa os dois testes dentro de 5 minutos, aguarda pelo menos um ciclo de scraping do Prometheus (5 segundos) e usa a janela `Last 15 minutes` no dashboard. O teste de 1000 VUs, sozinho, não cria compensações: os 980 pedidos sem stock têm outcome `aborted`.
+
+  O p95 é mais representativo com várias amostras de cada outcome; o bloco acima gera 20 compensações.
+
 - **Teste de Validação do Rate Limiter (HTTP 429):**
   ```powershell
   docker compose run --rm k6 run rate-limit-test.js
@@ -397,6 +463,7 @@ Com os serviços em execução, aceda aos seguintes URLs:
 | **Prometheus Web UI** | [http://localhost:9090](http://localhost:9090) | [http://localhost:30090](http://localhost:30090) | Interface de consulta do Prometheus |
 | **Grafana Dashboard Fase 1** | [http://localhost:3000](http://localhost:3000) | [http://localhost:30300](http://localhost:30300) | Painel Gateway e Catálogo (admin / admin) |
 | **Grafana Dashboard Fase 2** | [http://localhost:3000](http://localhost:3000) | [http://localhost:30300](http://localhost:30300) | Painel Orders, Notifications e RabbitMQ |
+| **Grafana Inventory & Sagas** | [http://localhost:3000/d/ticketmei-inventory-sagas/ticketmei-inventory-sagas](http://localhost:3000/d/ticketmei-inventory-sagas/ticketmei-inventory-sagas) | [http://localhost:30300/d/ticketmei-inventory-sagas/ticketmei-inventory-sagas](http://localhost:30300/d/ticketmei-inventory-sagas/ticketmei-inventory-sagas) | Stock, reservas, resultados das Sagas, compensações e latência |
 | **cAdvisor UI** | [http://localhost:8080](http://localhost:8080) | - | Métricas de hardware e contentores |
 
 ---

@@ -21,6 +21,9 @@ resources:
   - payment/deployment.yaml
   - payment/service.yaml
   - payment/pvc.yaml
+  - inventory/deployment.yaml
+  - inventory/service.yaml
+  - inventory/pvc.yaml
   - api-gateway/deployment.yaml
   - api-gateway/service.yaml
   - monitoring/prometheus-configmap.yaml
@@ -47,3 +50,4 @@ configMapGenerator:
       - monitoring/assets/dashboard2.json
       - monitoring/assets/dashboard-rate-limit.json
       - monitoring/assets/dashboard-payment-resilience.json
+      - monitoring/assets/dashboard-saga-inventory.json

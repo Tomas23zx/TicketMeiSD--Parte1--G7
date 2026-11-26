@@ -49,7 +49,11 @@ spec:
               readOnly: true
             - name: grafana-dashboards
               mountPath: /var/lib/grafana/dashboards/dashboard-payment-resilience.json
-              subPath: dashboard-fase1.json
+              subPath: dashboard-payment-resilience.json
+              readOnly: true
+            - name: grafana-dashboards
+              mountPath: /var/lib/grafana/dashboards/dashboard-saga-inventory.json
+              subPath: dashboard-saga-inventory.json
               readOnly: true
           readinessProbe:
             httpGet:

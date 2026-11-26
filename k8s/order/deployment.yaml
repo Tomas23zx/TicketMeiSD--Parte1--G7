@@ -27,6 +27,8 @@ spec:
               value: /app/data/order.db
             - name: PAYMENT_URL
               value: http://payment:8004/payments
+            - name: INVENTORY_URL
+              value: http://inventory:8005/inventory
           volumeMounts:
             - name: order-data
               mountPath: /app/data
